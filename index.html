@@ -454,7 +454,7 @@ body.on-start .l-final{background:radial-gradient(600px 300px at 50% 0,rgba(88,7
         <div class="row" id="sfxPrev"><button class="btn sm" data-ev="move" type="button">Move</button><button class="btn sm" data-ev="capture" type="button">Capture</button><button class="btn sm" data-ev="check" type="button">Check</button><button class="btn sm" data-ev="castle" type="button">Castle</button><button class="btn sm" data-ev="brilliant" type="button">Brilliant</button><button class="btn sm" data-ev="blunder" type="button">Blunder</button></div>
         <h3 style="margin-top:18px">Engine</h3>
         <div class="srow"><label for="engPick">Engine</label><select id="engPick"><option value="auto">Automatic (Full if it loads, else Lite)</option><option value="full">Full only (error if it fails)</option><option value="lite">Lite (faster, built in)</option></select><span></span></div>
-        <div class="hint" style="margin:-4px 0 6px">Full needs <b>stockfish-full.js</b> and <b>stockfish-full.wasm</b> uploaded next to this page. Automatic falls back to Lite if Full fails. Full only never falls back. Changing this reloads the page.</div>
+        <div class="hint" style="margin:-4px 0 6px">Full needs <b>stockfish-full.js</b> and <b>stockfish-full.wasm</b> uploaded next to this page. Automatic uses Lite on phones, and elsewhere tries Full and falls back to Lite if it fails. Full only never falls back and is a ~99 MB download, so it is best on a computer. Changing this reloads the page.</div>
         <details class="foot" id="engLog" style="margin-top:18px"><summary>Engine details</summary><pre id="engLogText">Waiting for the engine…</pre></details>
         <div id="installBox" style="margin-top:18px"><h3>Install</h3><p class="hint" id="installNote">On a phone, use your browser's menu and choose “Add to Home Screen” to install it like an app.</p><div class="row"><button class="btn sm" id="installBtn" hidden>Install app</button></div></div>
       </div>
@@ -5093,7 +5093,20 @@ Engine.prototype._try=function(kind,script,hash,timeout){
         resolve();
       }else{try{w.terminate();}catch(_){}reject(err);}
     }
-    t=setTimeout(function(){fin(false,new Error('no response after '+Math.round(timeout/1000)+' s'));},timeout);
+    function arm(ms,why){clearTimeout(t);t=setTimeout(function(){fin(false,new Error(why+' after '+Math.round(ms/1000)+' s'));},ms);}
+    arm(timeout,'no response');
+    if(kind==='wasm'&&/full/.test(script)&&window.MessageChannel){
+      try{
+        var mc=new MessageChannel();
+        mc.port1.onmessage=function(m){
+          var d=m.data;if(!d||done)return;
+          arm(60000,'download stalled');
+          var mb=function(x){return (x/1048576).toFixed(0);};
+          setEngineStatus('loading','Downloading Full engine: '+Math.round((d.percent||0)*100)+'% ('+mb(d.loaded)+' of '+mb(d.total)+' MB'+(d.etaText?', about '+d.etaText+' left':'')+')');
+        };
+        w.postMessage({progressPort:mc.port2},[mc.port2]);
+      }catch(e){}
+    }
     w.onerror=function(e){
       if(e&&e.preventDefault)e.preventDefault();
       fin(false,new Error((e&&e.message)?e.message:'the worker script could not be loaded or started'));
@@ -5110,6 +5123,12 @@ Engine.prototype._try=function(kind,script,hash,timeout){
     w.postMessage('uci');
   });
 };
+function smallDevice(){
+  var ua=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||'');
+  var coarse=false;try{coarse=window.matchMedia('(pointer:coarse)').matches&&Math.min(screen.width,screen.height)<900;}catch(e){}
+  var mem=navigator.deviceMemory&&navigator.deviceMemory<=4;
+  return ua||coarse||!!mem;
+}
 Engine.prototype.init=function(setStatus){
   var self=this;
   var U=HOSTS[0],J=HOSTS[1];
@@ -5123,9 +5142,10 @@ Engine.prototype.init=function(setStatus){
     {kind:'asm',label:'Stockfish 10 JavaScript (cdnjs backup)',script:'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js',hash:'',to:90000,old:true}
   ];
   var pref='auto';try{pref=localStorage.getItem('so_eng')||'auto';}catch(e){}
+  if(pref==='auto'&&smallDevice()){pref='lite';self.phoneLite=true;elog('Phone or low-memory device detected: Automatic uses Lite. Choose "Full only" to force the big engine.');}
   if(pref==='lite')tries=tries.slice(1);
   else if(pref==='full')tries=tries.slice(0,1);
-  self.pref=pref;
+  self.pref=self.phoneLite?'auto':pref;
   elog('Engine choice: '+(pref==='lite'?'Lite only':pref==='full'?'Full only (no fallback)':'Automatic (Full if present, else Lite)'));
   var p=Promise.reject(new Error('start'));
   tries.forEach(function(t){
