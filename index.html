@@ -5114,7 +5114,7 @@ Engine.prototype.init=function(setStatus){
   var self=this;
   var U=HOSTS[0],J=HOSTS[1];
   var tries=[
-    {kind:'wasm',label:'Stockfish (full network, bundled)',script:'stockfish-full.js',hash:'',to:30000},
+    {kind:'wasm',label:'Stockfish (full network, bundled)',script:'stockfish-full.js',hash:'',to:180000},
     {kind:'wasm',label:'Stockfish 19 (bundled with this page)',script:'stockfish-19-lite-single.js',hash:'',to:20000},
     {kind:'wasm',label:'Stockfish 19 WebAssembly',script:U+'stockfish-19-lite-single.js',hash:U+'stockfish-19-lite-single.wasm',to:9000},
     {kind:'wasm',label:'Stockfish 19 WebAssembly (jsDelivr)',script:J+'stockfish-19-lite-single.js',hash:J+'stockfish-19-lite-single.wasm',to:9000},
@@ -5143,7 +5143,7 @@ Engine.prototype.init=function(setStatus){
 Engine.prototype.post=function(c){this.w.postMessage(c);};
 Engine.prototype.clone=function(){
   var self=this,e=new Engine();e.old=self.old;e.name=self.name;
-  return e._try(self.kind,self.script,self.hash,20000).then(function(){
+  return e._try(self.kind,self.script,self.hash,/full/.test(self.script||'')?180000:20000).then(function(){
     e.w.postMessage('setoption name Hash value 16');e.w.postMessage('setoption name MultiPV value 3');return e;
   });
 };
@@ -5155,6 +5155,7 @@ function wantWorkers(){
 function ensurePool(){
   var n=wantWorkers();
   if(eng.kind!=='wasm')n=1;
+  if(/full/.test(eng.script||''))n=Math.min(n,2);
   eng.pool=eng.pool||[];
   var need=[];
   for(var i=eng.pool.length+1;i<n;i++)need.push(eng.clone().then(function(e){eng.pool.push(e);},function(err){elog('Extra engine failed: '+(err&&err.message));}));
