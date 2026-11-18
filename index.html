@@ -203,6 +203,28 @@ select{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
 .s{width:20px;height:20px;border-radius:50%;flex:none;font-size:10px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-d);font-weight:700;line-height:1}
 
 .graph svg{width:100%;height:auto;cursor:crosshair;border-radius:10px;touch-action:none}
+.gtabs{display:flex;gap:6px;margin-bottom:10px}
+.gtabs button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:13px;font-weight:500}
+.gtabs button.on{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.uimp{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.uimp select{flex:0 0 auto}
+.uimp input{flex:1 1 140px;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:14px;min-height:40px;color:var(--fg)}
+.uimp input:focus{outline:none;border-color:var(--accent)}
+.saved{display:grid;gap:8px;margin-top:10px}
+.saved .it{display:flex;gap:8px;align-items:stretch}
+.saved .open{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 13px}
+.saved .open:hover{border-color:var(--accent)}
+.saved .open b{font-family:var(--font-d);font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saved .open span{font-size:12.5px;color:var(--muted)}
+.saved .del{flex:none;width:40px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:16px}
+.saved .del:hover{border-color:var(--bad);color:var(--bad)}
+.board.retrying .sq{cursor:pointer}
+.sq.rsel{box-shadow:inset 0 0 0 .6cqw var(--accent)}
+.sq.rdest::after{content:"";position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:rgba(47,179,106,.6);z-index:4;pointer-events:none}
+.sq.rdest.cap::after{left:6%;top:6%;width:88%;height:88%;background:none;border:.7cqw solid rgba(47,179,106,.7)}
+.rmsg{margin:6px 0 4px;font-size:14.5px;line-height:1.5}
+.rmsg .ok{color:var(--good);font-weight:600}.rmsg .bad{color:var(--bad);font-weight:600}
+
 .moves{position:relative;margin-top:14px;max-height:280px;overflow:auto;display:grid;grid-template-columns:34px minmax(0,1fr) minmax(0,1fr);gap:2px 4px;align-content:start}
 .moves .num{color:var(--muted);font-family:var(--font-m);font-size:12px;padding:7px 0 0}
 .mv{display:flex;align-items:center;gap:7px;background:none;border:1px solid transparent;border-radius:8px;padding:5px 9px;font-family:var(--font-m);font-size:13.5px;text-align:left;min-width:0}
@@ -541,6 +563,15 @@ body.on-start .l-final{background:radial-gradient(600px 300px at 50% 0,rgba(88,7
             <button class="sample" id="sampleLegal"><b>Légal's Mate</b><span>Paris, 1750. A knight and bishop trap.</span></button>
           </div>
         </div>
+        <div class="card" id="userCard">
+          <span class="eyebrow">Import by username</span>
+          <div class="uimp"><select id="uSite" aria-label="Site"><option value="chesscom">Chess.com</option><option value="lichess">Lichess</option></select><input id="uName" type="text" placeholder="Username" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Username"><button class="btn sm primary" id="uGo" type="button">Get games</button></div>
+          <p class="hint" id="uNote" style="margin-top:8px">Loads that player's 10 most recent games. Pick one from the list that appears above the board.</p>
+        </div>
+        <div class="card" id="savedCard" hidden>
+          <span class="eyebrow">Your saved reviews</span>
+          <div class="saved" id="savedList"></div>
+          <p class="hint" style="margin-top:8px">Finished reviews are kept on this device only.</p>
         </div>
       </div>
     </section>
@@ -586,7 +617,7 @@ body.on-start .l-final{background:radial-gradient(600px 300px at 50% 0,rgba(88,7
           <div class="card verdict" id="explain"></div>
           <div class="card" id="linesCard"></div>
           <div class="card" id="momentsCard"><h2>Key moments</h2><div class="moments" id="moments"></div></div>
-          <div class="card graph"><h2>Evaluation</h2><div id="graph"></div><div class="moves" id="moves"></div></div>
+          <div class="card graph"><div class="gtabs" role="tablist"><button id="gtEval" class="on" type="button">Evaluation</button><button id="gtAcc" type="button">Move accuracy</button></div><div id="graph"></div><p class="hint" id="gHint" style="margin:8px 0 10px"></p><div class="moves" id="moves"></div></div>
           <div class="card" id="summary"></div>
           <details class="card" id="exportCard"><summary>Export and share</summary><p class="hint" style="margin-top:8px">The PGN below carries a move grade and evaluation on every move, ready to paste into another viewer.</p><textarea class="exportBox" id="exportBox" readonly spellcheck="false"></textarea><div class="row" style="margin-top:8px"><button class="btn sm" id="copyPgn">Copy PGN</button><button class="btn sm" id="copyFen">Copy current FEN</button><span class="hint" id="copyNote"></span></div></details>
           <div class="card">
@@ -6145,6 +6176,11 @@ function candidateMoves(c){
   });
   return out;
 }
+function pickV(arr,c){
+  var h=7,t=String(c.fenB||'')+c.san+c.i;
+  for(var k=0;k<t.length;k++)h=(h*31+t.charCodeAt(k))>>>0;
+  return arr[h%arr.length];
+}
 function gmComment(c){
   var me=side(c.color),opp=side(c.opp),pl=moveIdeas(c.fenA,c.uci,c.color,lastToOf(c)),f=pl.flags,out=[];
   var ph=phaseOf(c.fenA),mvPiece=PN[c.mv.piece],to=c.mv.to,from=c.mv.from;
@@ -6192,20 +6228,24 @@ function gmComment(c){
   // 3. concrete variation with evaluation
   if(c.A&&c.A.lines&&c.A.lines[0]&&c.A.lines[0].pv&&c.A.lines[0].pv.length>=3){
     var steps=playPv(c.fenA,c.A.lines[0].pv,6),ln=fmtLine(c.fenA,steps),sc=c.A.lines[0].score;
-    var after=c.playedIsBest?'The critical line runs ':'The engine\'s preferred line is ';
+    var after=c.playedIsBest?pickV(['The critical line runs ','The key sequence is ','Play would most likely continue '],c):pickV(['The engine\'s preferred line is ','The engine would have gone for ','The stronger plan was '],c);
     out.push(after+'<b>'+ln+'</b>, which the engine rates as '+evalTalk(sc,c.color)+'.');
   }
   // 4. verdict by class
-  var v={brilliant:'This is the kind of move strong players remember: the material you give up is repaid by activity, tempo or mate threats that the opponent cannot handle.',
-    great:'Finding this requires accurate calculation because the natural-looking alternatives all lose ground.',
-    best:'It is the engine\'s top choice, so nothing was left on the table.',
-    excellent:'It keeps virtually all of the position\'s value; the engine\'s first choice differs only in small details.',
-    good:'A reasonable move that keeps the balance, though the engine had a slightly more precise option.',
-    inaccuracy:'It is not a disaster, but it hands the opponent a small edge that a precise player will use.',
-    mistake:'This is a real error: it gives away a significant part of the advantage and changes who is pressing.',
-    miss:'The opponent had just slipped, and this move does not punish it, so the chance to take over the game passes.',
-    blunder:'This is a decisive error: it changes the evaluation sharply, typically by losing material or allowing a forced sequence.',
-    book:'It is established opening theory, so there is nothing to criticise.',forced:'It was the only legal move.'}[c.cls];
+  var VV={
+    brilliant:['This is the kind of move strong players remember: the material you give up is repaid by activity, tempo or mate threats that the opponent cannot handle.','A real sacrifice that works. The pieces left on the board do more than the ones given up, and the opponent has no good way to cash in.','Moves like this are why chess is worth studying: the idea looks wrong at first sight and turns out to be the only correct one.'],
+    great:['Finding this requires accurate calculation because the natural-looking alternatives all lose ground.','A strong, precise choice. Most other moves here let the advantage slip, so this one deserves credit.','This is the critical move of the position, and it was the one that had to be found.'],
+    best:['It is the engine\'s top choice, so nothing was left on the table.','Nothing better was available here, so the move is exactly right.','This matches the engine\'s first choice, which is as good as a move gets.'],
+    excellent:['It keeps virtually all of the position\'s value; the engine\'s first choice differs only in small details.','An excellent practical choice, one step away from perfect.','It holds the balance of the position almost exactly as well as the best move would.'],
+    good:['A reasonable move that keeps the balance, though the engine had a slightly more precise option.','A sound move, only a touch behind the best one.','Perfectly playable. The engine saw a slightly sharper idea, but nothing is lost here.'],
+    inaccuracy:['It is not a disaster, but it hands the opponent a small edge that a precise player will use.','A small slip: the position is still fine, but a better move was available and it would have kept more of the advantage.','Not a serious error, though the opponent now has slightly easier play.'],
+    mistake:['This is a real error: it gives away a significant part of the advantage and changes who is pressing.','A genuine mistake that shifts the balance of the game, and the opponent can start to take over.','The position gets noticeably worse after this move, and it takes accurate play to recover.'],
+    miss:['The opponent had just slipped, and this move does not punish it, so the chance to take over the game passes.','The opponent offered a chance and this move lets it go, so the game stays level when it could have swung.','A missed opportunity: the previous move was weak and there was a way to make it count.'],
+    blunder:['This is a decisive error: it changes the evaluation sharply, typically by losing material or allowing a forced sequence.','A serious blunder that swings the game in the opponent\'s favour, usually by dropping material or allowing a tactic.','This move throws away most of the position\'s value in one go.'],
+    book:['It is established opening theory, so there is nothing to criticise.','A well-known theory move, played by strong players all the time.','Standard opening knowledge, so no complaints here.'],
+    forced:['It was the only legal move.']
+  };
+  var v=VV[c.cls]?pickV(VV[c.cls],c):'';
   if(v)out.push(v);
   return out;
 }
@@ -6983,8 +7023,9 @@ function renderBoard(){
   if(cls&&S.showArrow&&!cls.playedIsBest&&cls.bestUci){
     arrows='<svg class="arrows" viewBox="0 0 8 8" aria-hidden="true">'+arrowSvg(cls.bestUci,'#2fb36a')+'</svg>';
   }
+  if(S.retry){arrows=S.retry.show?'<svg class="arrows" viewBox="0 0 8 8" aria-hidden="true">'+arrowSvg(S.retry.c.bestUci,'#2fb36a')+'</svg>':'';}
   $('board').innerHTML=h+arrows;
-  applyHl();
+  applyHl();applyRetryUi();
   if(S.anim&&!reduceMotion&&$('animToggle').checked){
     var el=$('board').querySelector('.sq[data-sq="'+S.anim.to+'"] .pc');
     if(el){
@@ -7023,8 +7064,89 @@ function badgeHtml(key,cls){var c=CLS[key];return '<span class="'+cls+'" style="
 function plyNo(i){return Math.floor((i+S.off)/2)+S.n0;}
 function isBlackPly(i){return (i+S.off)%2===1;}
 function plainText(h){return String(h).replace(/<[^>]+>/g,' ').replace(/&[a-z]+;/g,' ').replace(/\s+/g,' ').trim();}
+function pieceAt(fen,sq){var b=newChess(fen).board();return b[8-(+sq[1])][sq.charCodeAt(0)-97];}
+function canRetry(c){return !!(c&&['blunder','mistake','miss','inaccuracy'].indexOf(c.cls)>=0&&!c.playedIsBest&&c.bestUci&&!S.running);}
+function startRetry(){
+  var c=S.cls[S.idx-1];if(!canRetry(c))return;
+  setPlaying(false);SPEECH.cancel();
+  go(c.i,{silent:true,noSpeak:true});
+  S.retry={k:c.i,from:null,done:false,show:false,msg:'',busy:false,c:c};
+  renderAll();
+}
+function exitRetry(){
+  var R=S.retry;if(!R)return;
+  var c=R.c;S.retry=null;
+  go(c.i+1,{silent:true,noSpeak:true});
+  renderAll();
+}
+function renderRetryPanel(){
+  var R=S.retry,c=R.c,me=side(c.color);
+  var h='<div class="head"><span class="bigbadge" style="background:var(--accent)">?</span><div><h2>Your turn: find a better move</h2><div class="evline">'+me+' to move. In the game, <b>'+esc(c.san)+'</b> was played ('+CLS[c.cls].label+').</div></div></div>';
+  h+='<p class="hint" style="margin:10px 0 4px">Click a piece, then the square to move it to. Any move the engine rates close to the best one counts.</p>';
+  h+='<div class="rmsg" aria-live="polite">'+(R.msg||'')+'</div><div class="row">';
+  if(!R.done)h+='<button class="btn sm" id="retryShow" type="button">Show the answer</button>';
+  h+='<button class="btn sm primary" id="retryExit" type="button">'+(R.done?'Continue the review':'Back to the review')+'</button></div>';
+  $('explain').innerHTML=h;
+}
+function showRetry(){
+  var R=S.retry;if(!R)return;
+  R.show=true;R.from=null;
+  R.msg='The best move was <b>'+esc(R.c.bestSan)+'</b>'+(R.c.bestLine?', the start of <b>'+esc(R.c.bestLine)+'</b>':'')+'. It is shown with the green arrow.';
+  renderBoard();renderRetryPanel();
+}
+function judgeDone(R,m,w){
+  var c=R.c,loss=c.wBefore-w;
+  R.busy=false;
+  if(loss<=3){
+    R.done=true;
+    R.msg='<span class="ok">Well found.</span> <b>'+esc(m.san)+'</b> keeps '+Math.round(w)+'% for '+side(c.color)+', close to the best move <b>'+esc(c.bestSan)+'</b> ('+Math.round(c.wBefore)+'%).';
+  }else{
+    R.msg='<span class="bad">Not quite.</span> <b>'+esc(m.san)+'</b> leaves '+side(c.color)+' with '+Math.round(w)+'% against '+Math.round(c.wBefore)+'% for the best move. Try another move, or show the answer.';
+  }
+  R.from=null;renderBoard();renderRetryPanel();
+}
+function judgeRetry(m){
+  var R=S.retry,c=R.c,uci=m.from+m.to+(m.promotion||'');
+  R.from=null;
+  if(uci===c.uci){R.msg='<span class="bad">That is the move that was played</span>, and it is the mistake. Try something else.';renderBoard();renderRetryPanel();return;}
+  if(uci===c.bestUci){R.done=true;R.msg='<span class="ok">Correct.</span> <b>'+esc(m.san)+'</b> is the engine\'s top choice here.';renderBoard();renderRetryPanel();return;}
+  var line=c.A.lines.filter(function(l){return l.pv&&l.pv[0]===uci;})[0];
+  if(line){judgeDone(R,m,wp(line.score,c.color));return;}
+  var g2=newChess(c.fenA);g2.move({from:m.from,to:m.to,promotion:m.promotion});
+  if(g2.in_checkmate()){R.done=true;R.msg='<span class="ok">Checkmate.</span> <b>'+esc(m.san)+'</b> ends the game.';renderBoard();renderRetryPanel();return;}
+  R.busy=true;R.msg='Checking that move with the engine…';renderBoard();renderRetryPanel();
+  var fenX=g2.fen();
+  eng.ready.then(function(){return eng.analyze(fenX,12,4000);}).then(function(lines){
+    if(S.retry!==R)return;
+    if(!lines||!lines.length){R.busy=false;R.msg='The engine could not check that move. Try another one or show the answer.';renderRetryPanel();return;}
+    var nl=normLines(lines,g2.turn());
+    judgeDone(R,m,wp(nl[0].score,c.color));
+  }).catch(function(){if(S.retry!==R)return;R.busy=false;R.msg='The engine could not check that move. Try another one or show the answer.';renderRetryPanel();});
+}
+function retryClick(ev){
+  var R=S&&S.retry;if(!R||R.done||R.busy)return;
+  var el=ev.target.closest&&ev.target.closest('.sq');if(!el)return;
+  var sq=el.getAttribute('data-sq'),fen=S.fens[R.k],g=newChess(fen),p=pieceAt(fen,sq);
+  if(p&&p.color===g.turn()){R.from=R.from===sq?null:sq;R.show=false;renderBoard();return;}
+  if(!R.from)return;
+  var mv=g.moves({verbose:true}).filter(function(m){return m.from===R.from&&m.to===sq;});
+  if(!mv.length){R.msg='<span class="bad">That is not a legal move.</span>';R.from=null;renderBoard();renderRetryPanel();return;}
+  judgeRetry(mv.filter(function(x){return x.promotion==='q';})[0]||mv[0]);
+}
+function applyRetryUi(){
+  var b=$('board'),R=S.retry;
+  b.classList.toggle('retrying',!!(R&&!R.done));
+  if(!R||!R.from)return;
+  var sqEl=b.querySelector('.sq[data-sq="'+R.from+'"]');if(sqEl)sqEl.classList.add('rsel');
+  newChess(S.fens[R.k]).moves({verbose:true}).forEach(function(m){
+    if(m.from!==R.from)return;
+    var d=b.querySelector('.sq[data-sq="'+m.to+'"]');
+    if(d){d.classList.add('rdest');if(m.captured)d.classList.add('cap');}
+  });
+}
 function renderExplain(){
   var el=$('explain');
+  if(S.retry){renderRetryPanel();return;}
   if(S.idx===0){
     el.innerHTML='<div class="empty"><span class="bigbadge">'+GLYPH.n+TXT+'</span><div><h2>Starting position</h2><p class="hint">Step through the game with the arrow keys or the buttons. '+(S.cls.some(Boolean)?'Each move shows its grade and the reason for it.':'Press “Analyze game” and every move gets a grade and a reason.')+'</p></div></div>';
     return;
@@ -7047,6 +7169,7 @@ function renderExplain(){
       return q.length||ui?'<span class="sn" tabindex="0"'+ui+' data-sq="'+q.join(' ')+'">'+sn+'</span>':sn;
     }).join(' ')+'</p>';}).join('')+'</div>';}).join('');
   if(x.better)h+='<div class="better"><span>'+x.better+'</span></div>';
+  if(canRetry(c))h+='<div class="row"><button class="btn sm" id="retryBtn" type="button">Try to find the better move</button></div>';
   if(x.lines.length)h+='<div class="lines">'+x.lines.map(function(l){return '<div><em>'+l[0]+'</em>'+l[1]+'</div>';}).join('')+'</div>';
   el.innerHTML=h;
   applyHl();
@@ -7108,7 +7231,24 @@ function renderMoments(){
 }
 var GW=600,GH=110;
 function gx(k){var n=S.fens.length;return n>1?k/(n-1)*GW:0;}
+var GMODE='eval';
+function renderAccGraph(){
+  var n=S.fens.length,s='<rect width="'+GW+'" height="'+GH+'" fill="var(--panel2)"/>';
+  [25,50,75].forEach(function(v){var y=(GH-6)*(1-v/100)+3;s+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+GW+'" y2="'+y.toFixed(1)+'" stroke="#8a97a8" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>';});
+  var bw=Math.max(1.5,GW/Math.max(n-1,1)*0.72);
+  S.cls.forEach(function(c,i){
+    if(!c)return;
+    var h=Math.max(2,(GH-6)*c.acc/100),x=gx(i+1)-bw/2;
+    s+='<rect x="'+x.toFixed(1)+'" y="'+(GH-3-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1.2" fill="'+CLS[c.cls].color+'" opacity="'+(c.color==='w'?1:.7)+'"/>';
+  });
+  s+='<line x1="'+gx(S.idx).toFixed(1)+'" y1="0" x2="'+gx(S.idx).toFixed(1)+'" y2="'+GH+'" stroke="var(--accent)" stroke-width="2.2"/>';
+  $('gg').innerHTML=s;
+}
 function renderGraph(){
+  var gh=$('gHint');
+  if(gh)gh.textContent=GMODE==='acc'?'Each bar is one move: taller means more accurate, colour is the grade, and Black\'s bars are slightly faded. Click or drag to jump.':'White\'s winning chances after every move. Dots mark the big moments. Click or drag to jump.';
+  if($('gtEval')){$('gtEval').classList.toggle('on',GMODE==='eval');$('gtAcc').classList.toggle('on',GMODE==='acc');}
+  if(GMODE==='acc'){renderAccGraph();return;}
   var n=S.fens.length,pts=[],k;
   for(k=0;k<n;k++){var rec=S.pos[k];pts.push(rec?GH*(1-wpW(topScore(rec))/100):null);}
   var d='',started=false,last=-1,firstK=-1;
@@ -7224,7 +7364,7 @@ function go(i,opts){
   i=Math.max(0,Math.min(S.fens.length-1,i));
   var prev=S.idx;
   if(i===prev)return;
-  S.idx=i;
+  S.idx=i;S.retry=null;
   S.anim=(!opts.silent&&i-prev===1)?{from:S.moves[i-1].from,to:S.moves[i-1].to}:null;
   S.showArrow=$('arrowToggle').checked;
   S.hl=null;
@@ -7359,7 +7499,8 @@ function analyzeAll(){
     setRunningUi(false);
     $('analyzeBtn').textContent='Re-analyze';
     var done=G.pos.filter(Boolean).length;
-    progress(G.cancel?done:G.fens.length,G.fens.length,0,G.cancel?'Stopped':'Analysis complete');
+    var kept=!G.cancel&&saveReview();
+    progress(G.cancel?done:G.fens.length,G.fens.length,0,G.cancel?'Stopped':'Analysis complete'+(kept?' · saved on this device':''));
     renderAll();
     if(!G.cancel)SFX.play('start');
   }).catch(function(e){
@@ -7458,6 +7599,52 @@ function initLanding(){
   var iv=setInterval(function(){if(LAND_ON&&!raf)kick();},1500);
   document.body.classList.add('on-start');kick();
 })();
+function fetchUserGames(site,user){
+  user=String(user||'').trim().replace(/^@/,'');
+  if(!/^[A-Za-z0-9_-]{2,40}$/.test(user))return Promise.reject(new Error('That does not look like a valid username.'));
+  var netErr=function(){return new Error('Could not reach '+(site==='lichess'?'Lichess':'Chess.com')+'. Check your connection and try again.');};
+  if(site==='lichess'){
+    return fetch('https://lichess.org/api/games/user/'+encodeURIComponent(user)+'?max=10&tags=true&clocks=false&evals=false&opening=true',{headers:{Accept:'application/x-chess-pgn'}}).catch(function(){throw netErr();}).then(function(r){
+      if(r.status===404)throw new Error('There is no Lichess user called "'+user+'".');
+      if(r.status===429)throw new Error('Lichess is asking for a short pause. Try again in a minute.');
+      if(!r.ok)throw new Error('Lichess answered with an error ('+r.status+'). Try again later.');
+      return r.text();
+    }).then(function(t){t=t.trim();if(!t)throw new Error('No games found for "'+user+'".');return t;});
+  }
+  var base='https://api.chess.com/pub/player/'+encodeURIComponent(user.toLowerCase())+'/games/';
+  return fetch(base+'archives').catch(function(){throw netErr();}).then(function(r){
+    if(r.status===404)throw new Error('There is no Chess.com user called "'+user+'".');
+    if(!r.ok)throw new Error('Chess.com answered with an error ('+r.status+'). Try again later.');
+    return r.json();
+  }).then(function(j){
+    var arch=(j.archives||[]).slice(-2).reverse();
+    if(!arch.length)throw new Error('No games found for "'+user+'".');
+    return Promise.all(arch.map(function(u){return fetch(u).then(function(r){return r.ok?r.json():{games:[]};}).catch(function(){return {games:[]};});}));
+  }).then(function(list){
+    var games=[];
+    list.forEach(function(x){(x.games||[]).slice().reverse().forEach(function(g){if(g.pgn&&(!g.rules||g.rules==='chess'))games.push(g.pgn.trim());});});
+    games=games.slice(0,10);
+    if(!games.length)throw new Error('No standard games found for "'+user+'".');
+    return games.join('\n\n');
+  });
+}
+function wireUserImport(){
+  var go=$('uGo'),nm=$('uName'),st=$('uSite'),note=$('uNote');
+  if(!go)return;
+  try{var sv=JSON.parse(localStorage.getItem('so_user')||'null');if(sv){nm.value=sv.name||'';if(sv.site)st.value=sv.site;}}catch(e){}
+  var run=function(){
+    var name=nm.value.trim();
+    if(!name){note.textContent='Type a username first.';return;}
+    go.disabled=true;note.textContent='Loading games…';showErr('');
+    fetchUserGames(st.value,name).then(function(text){
+      try{localStorage.setItem('so_user',JSON.stringify({site:st.value,name:name}));}catch(e){}
+      note.textContent='Loaded. Choose a game from the list above the board.';
+      $('pgn').value=text;startGame(text);
+    }).catch(function(e){note.textContent=e&&e.message?e.message:'Something went wrong. Try again.';}).then(function(){go.disabled=false;});
+  };
+  go.onclick=run;
+  nm.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();run();}});
+}
 function showErr(m){var e=$('importErr');e.textContent=m;e.hidden=!m;}
 function nm(h,key,fallback){return (h&&h[key]&&h[key]!=='?'&&h[key]!=='-')?h[key]:fallback;}
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -7516,6 +7703,59 @@ function startGame(text,idx){
   progress(0,1,0,'Not analyzed yet');
   renderAll();
   SFX.play('start');
+}
+
+/* ---------- saved reviews ---------- */
+var SAVE_KEY='so_saved_v1';
+function savedList(){try{var a=JSON.parse(localStorage.getItem(SAVE_KEY)||'[]');return Array.isArray(a)?a:[];}catch(e){return [];}}
+function writeSaved(a){
+  for(var n=a.length;n>=0;n--){
+    try{localStorage.setItem(SAVE_KEY,JSON.stringify(a.slice(0,n)));return true;}catch(e){}
+  }
+  return false;
+}
+function hashStr(t){var h=5381;for(var i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return h.toString(36);}
+function saveReview(){
+  if(!S||S.cancel)return false;
+  if(S.pos.filter(Boolean).length<S.fens.length)return false;
+  var one=splitGames(S.raw)[S.gameIndex]||S.raw,id=hashStr(one);
+  var res=S.hdr&&S.hdr.Result&&S.hdr.Result!=='*'?S.hdr.Result:'';
+  var entry={id:id,t:Date.now(),raw:one,title:S.white.name+' vs '+S.black.name,sub:[res,S.moves.length+' moves',(S.open&&S.open[S.open.length-1]||{}).name].filter(Boolean).join(' · '),
+    pos:S.pos.map(function(r){return r.term?r:{term:false,lines:r.lines.map(function(l){return {pv:l.pv.slice(0,10),depth:l.depth,score:l.score};})};})};
+  var a=savedList().filter(function(x){return x.id!==id;});
+  a.unshift(entry);a=a.slice(0,12);
+  var ok=writeSaved(a);
+  renderSaved();
+  return ok;
+}
+function openSaved(id){
+  var e=savedList().filter(function(x){return x.id===id;})[0];if(!e)return;
+  $('pgn').value=e.raw;
+  startGame(e.raw,0);
+  if(!S||S.fens.length!==e.pos.length)return;
+  S.pos=e.pos;S.cls=[];
+  for(var k=1;k<S.fens.length;k++)S.cls[k-1]=analyseMove(k-1);
+  $('analyzeBtn').textContent='Re-analyze';
+  progress(S.fens.length,S.fens.length,0,'Loaded from your saved reviews');
+  renderAll();
+}
+function renderSaved(){
+  var a=savedList(),card=$('savedCard'),el=$('savedList');
+  if(!card)return;
+  card.hidden=!a.length;
+  el.innerHTML=a.map(function(x){
+    var d=new Date(x.t),ds=isNaN(d)?'':d.toLocaleDateString(undefined,{day:'numeric',month:'short'});
+    return '<div class="it"><button class="open" type="button" data-id="'+esc(x.id)+'"><b>'+esc(x.title)+'</b><span>'+esc(x.sub||'')+(ds?' · saved '+esc(ds):'')+'</span></button><button class="del" type="button" data-del="'+esc(x.id)+'" aria-label="Delete this saved review">&times;</button></div>';
+  }).join('');
+}
+function wireSaved(){
+  var el=$('savedList');if(!el)return;
+  el.addEventListener('click',function(ev){
+    var d=ev.target.closest('[data-del]');
+    if(d){writeSaved(savedList().filter(function(x){return x.id!==d.getAttribute('data-del');}));renderSaved();return;}
+    var o=ev.target.closest('[data-id]');if(o)openSaved(o.getAttribute('data-id'));
+  });
+  renderSaved();
 }
 
 /* ---------- export ---------- */
@@ -7610,6 +7850,8 @@ function wire(){
   ['dragleave','drop'].forEach(function(n){drop.addEventListener(n,function(e){e.preventDefault();drop.classList.remove('over');});});
   drop.addEventListener('drop',function(e){var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];if(f)readFile(f);});
   initLanding();
+  wireUserImport();
+  wireSaved();
   setTimeout(function(){try{buildBook();}catch(e){}},400);
   var dip=null;
   window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dip=e;$('installBtn').hidden=false;$('heroInstall').hidden=false;});
@@ -7649,6 +7891,8 @@ function wire(){
   var exp=$('explain');
   var tapSn=function(ev){var e=ev.target.closest&&ev.target.closest('.sn');if(!e||!S)return;if(ev.type==='keydown'&&ev.key!=='Enter'&&ev.key!==' ')return;var q=(e.getAttribute('data-sq')||'').split(' ').filter(Boolean);if(!q.length)return;ev.preventDefault();var u=e.getAttribute('data-u');S.hl=q;applyHl();markSentence(u==null?null:+u);e.classList.add('on');};
   exp.addEventListener('click',tapSn);exp.addEventListener('keydown',tapSn);
+  exp.addEventListener('click',function(ev){var b=ev.target.closest&&ev.target.closest('button');if(!b||!S)return;if(b.id==='retryBtn')startRetry();else if(b.id==='retryShow')showRetry();else if(b.id==='retryExit')exitRetry();});
+  $('board').addEventListener('click',retryClick);
   updateRunInfo();
   $('exportCard').addEventListener('toggle',function(){if(this.open&&S)$('exportBox').value=annotatedPgn();});
   $('copyPgn').onclick=function(){if(!S)return;var t=annotatedPgn();$('exportBox').value=t;copyText(t);};
@@ -7656,6 +7900,8 @@ function wire(){
   $('engineChip').onclick=function(){openEngLog();};
   var jump=function(e){var b=e.target.closest('[data-i]');if(b)nav(+b.getAttribute('data-i'));};
   $('moves').onclick=jump;$('moments').onclick=jump;
+  $('gtEval').onclick=function(){GMODE='eval';if(S)renderGraph();};
+  $('gtAcc').onclick=function(){GMODE='acc';if(S)renderGraph();};
   // graph scrubbing (the svg is created once so pointer capture survives updates)
   $('graph').innerHTML='<svg id="gsvg" viewBox="0 0 '+GW+' '+GH+'" role="img" aria-label="Evaluation graph. Click or drag to move through the game."><g id="gg"></g></svg>';
   var gs=$('gsvg'),dragging=false;
