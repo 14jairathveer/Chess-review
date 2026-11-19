@@ -7082,7 +7082,7 @@ function retryTargets(){var out=[];(S.cls||[]).forEach(function(c){if(canRetry(c
 function retryNextMistake(){
   if(!S||S.running)return;
   var t=retryTargets();if(!t.length)return;
-  var after=t.filter(function(i){return i>=S.idx;});
+  var after=t.filter(function(i){return i>=S.idx-1;});
   var i=after.length?after[0]:t[0];
   S.retry=null;go(i+1,{silent:true,noSpeak:true});startRetry();
 }
@@ -7188,7 +7188,6 @@ function renderExplain(){
       return q.length||ui?'<span class="sn" tabindex="0"'+ui+' data-sq="'+q.join(' ')+'">'+sn+'</span>':sn;
     }).join(' ')+'</p>';}).join('')+'</div>';}).join('');
   if(x.better)h+='<div class="better"><span>'+x.better+'</span></div>';
-  if(canRetry(c))h+='<div class="row"><button class="btn sm" id="retryBtn" type="button">Try to find the better move</button></div>';
   if(x.lines.length)h+='<div class="lines">'+x.lines.map(function(l){return '<div><em>'+l[0]+'</em>'+l[1]+'</div>';}).join('')+'</div>';
   el.innerHTML=h;
   applyHl();
