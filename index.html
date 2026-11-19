@@ -616,7 +616,7 @@ body.on-start .l-final{background:radial-gradient(600px 300px at 50% 0,rgba(88,7
           <div class="card opening" id="openingCard"></div>
           <div class="card verdict" id="explain"></div>
           <div class="card" id="linesCard"></div>
-          <div class="card" id="momentsCard"><h2>Key moments</h2><div class="moments" id="moments"></div></div>
+          <div class="card" id="momentsCard"><h2>Key moments</h2><div class="row" style="margin:0 0 10px"><button class="btn sm primary" id="retryMistakesBtn" type="button" disabled>Retry mistakes</button><span class="hint" id="retryMistakesNote" style="margin-left:8px"></span></div><div class="moments" id="moments"></div></div>
           <div class="card graph"><div class="gtabs" role="tablist"><button id="gtEval" class="on" type="button">Evaluation</button><button id="gtAcc" type="button">Move accuracy</button></div><div id="graph"></div><p class="hint" id="gHint" style="margin:8px 0 10px"></p><div class="moves" id="moves"></div></div>
           <div class="card" id="summary"></div>
           <details class="card" id="exportCard"><summary>Export and share</summary><p class="hint" style="margin-top:8px">The PGN below carries a move grade and evaluation on every move, ready to paste into another viewer.</p><textarea class="exportBox" id="exportBox" readonly spellcheck="false"></textarea><div class="row" style="margin-top:8px"><button class="btn sm" id="copyPgn">Copy PGN</button><button class="btn sm" id="copyFen">Copy current FEN</button><span class="hint" id="copyNote"></span></div></details>
@@ -956,7 +956,7 @@ function gradeLoss(loss){
   if(loss<2) return 'excellent';
   if(loss<5) return 'good';
   if(loss<10) return 'inaccuracy';
-  if(loss<15) return 'mistake';
+  if(loss<20) return 'mistake';
   return 'blunder';
 }
 function moveAccuracy(loss){
@@ -1036,9 +1036,9 @@ var LEGEND={
   forced:'The only legal move.',
   book:'A standard opening move from theory. Book moves are never criticised.',
   inaccuracy:'Gives away a little (5% to 10% win chance).',
-  mistake:'Gives away a lot (10% to 15%).',
-  miss:'Your opponent just erred and you did not take the chance.',
-  blunder:'A serious error (15% or more), usually losing material or allowing mate.'
+  mistake:'Gives away a lot (10% to 20%).',
+  miss:'Your opponent just made a mistake and you did not make the most of it (you were clearly better and gave a good part of that back, without losing material).',
+  blunder:'A serious error (20% or more), usually losing material or allowing mate.'
 };
 var ART={w:{k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'},b:{k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'}};
 var HOSTS=['https://unpkg.com/stockfish@19.0.1/bin/','https://cdn.jsdelivr.net/npm/stockfish@19.0.1/bin/'];
@@ -5426,7 +5426,12 @@ function analyseMove(i){
     else if(g==='best'&&c.second&&c.gap>=15&&c.wBefore<97&&c.wBefore>=8&&mv.san.indexOf('#')<0&&!mv.captured)g='great';
     else if(g==='best'&&c.second&&c.gap>=25&&c.wBefore<97&&c.wBefore>=8&&mv.san.indexOf('#')<0)g='great';
   }
-  if((g==='inaccuracy'||g==='mistake')&&c.prev&&c.prev.loss>=10&&c.loss>=5&&c.wBefore>=50)g='miss';
+  // Miss: the opponent's last move was a real error, so this side was clearly better, and this move gave a good part of that back
+  // without simply losing material or allowing mate (that stays a blunder).
+  var oppErr=c.prev&&!c.prev.playedIsBest&&(c.prev.engLoss!=null?c.prev.engLoss:c.prev.loss)>=10;
+  if(oppErr&&c.wBefore>=60&&c.loss>=8&&c.wAfter>=40&&c.matLoss<3&&!c.allowedMate&&(g==='inaccuracy'||g==='mistake'||g==='blunder'))g='miss';
+  // Missing a short forced mate while still keeping a winning position is also a Miss.
+  if(c.missedMate&&!c.allowedMate&&c.wAfter>=50&&(g==='inaccuracy'||g==='mistake'||g==='blunder'))g='miss';
   if((g==='inaccuracy')&&S.inBook&&S.inBook[i]&&i<=22)g='good';
   if(c.allowedMate&&c.wBefore>15&&(g==='inaccuracy'||g==='mistake'||g==='good'))g='blunder';
   if(S.inBook&&S.inBook[i+1]){g='book';c.engLoss=c.loss;c.loss=0;}
@@ -6808,7 +6813,7 @@ var SPEECH=(function(){
   }catch(e){}
   function loadVoices(){
     if(!ok)return;
-    var NOVELTY=/^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Deranged|Good News|Hysterical|Jester|Organ|Pipe Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox)\b/i;
+    var NOVELTY=/^(Albert|Bad News|Bahh|Bell|Bells|Boing|Bruce|Bubbles|Agnes|Cellos|Deranged|Fred|Good News|Hysterical|Jester|Junior|Kathy|Organ|Pipe Organ|Princess|Ralph|Superstar|Trinoids|Victoria|Whisper|Wobble|Zarvox)\b/i;
     try{voices=(speechSynthesis.getVoices()||[]).filter(function(v){return /^en/i.test(v.lang)&&!NOVELTY.test(v.name);});}catch(e){voices=[];}
     if(onVoices)onVoices();
   }
@@ -7073,6 +7078,20 @@ function startRetry(){
   S.retry={k:c.i,from:null,done:false,show:false,msg:'',busy:false,c:c};
   renderAll();
 }
+function retryTargets(){var out=[];(S.cls||[]).forEach(function(c){if(canRetry(c))out.push(c.i);});return out;}
+function retryNextMistake(){
+  if(!S||S.running)return;
+  var t=retryTargets();if(!t.length)return;
+  var after=t.filter(function(i){return i>=S.idx;});
+  var i=after.length?after[0]:t[0];
+  S.retry=null;go(i+1,{silent:true,noSpeak:true});startRetry();
+}
+function updateRetryBtn(){
+  var b=$('retryMistakesBtn'),n=$('retryMistakesNote');if(!b)return;
+  var t=(S&&S.cls&&S.cls.some(Boolean))?retryTargets():[];
+  b.disabled=!t.length||!!(S&&S.running);
+  if(n)n.textContent=!S||!S.cls||!S.cls.some(Boolean)?'Analyze the game first.':(t.length?t.length+' to try':'Nothing to retry.');
+}
 function exitRetry(){
   var R=S.retry;if(!R)return;
   var c=R.c;S.retry=null;
@@ -7219,6 +7238,7 @@ function renderMoves(){
   }
 }
 function renderMoments(){
+  updateRetryBtn();
   var items=[];
   S.cls.forEach(function(c,i){if(c&&['brilliant','great','miss','mistake','blunder'].indexOf(c.cls)>=0)items.push([c,i]);});
   var el=$('moments');
@@ -7900,6 +7920,7 @@ function wire(){
   $('engineChip').onclick=function(){openEngLog();};
   var jump=function(e){var b=e.target.closest('[data-i]');if(b)nav(+b.getAttribute('data-i'));};
   $('moves').onclick=jump;$('moments').onclick=jump;
+  var rmb=$('retryMistakesBtn');if(rmb)rmb.onclick=retryNextMistake;
   $('gtEval').onclick=function(){GMODE='eval';if(S)renderGraph();};
   $('gtAcc').onclick=function(){GMODE='acc';if(S)renderGraph();};
   // graph scrubbing (the svg is created once so pointer capture survives updates)
