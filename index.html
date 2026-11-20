@@ -1037,7 +1037,7 @@ var LEGEND={
   book:'A standard opening move from theory. Book moves are never criticised.',
   inaccuracy:'Gives away a little (5% to 10% win chance).',
   mistake:'Gives away a lot (10% to 20%).',
-  miss:'Your opponent just made a mistake and you did not make the most of it (you were clearly better and gave a good part of that back, without losing material).',
+  miss:'A better move was available and the chance went unused (a winning tactic, material, or a clear advantage), but this move does not simply lose material.',
   blunder:'A serious error (20% or more), usually losing material or allowing mate.'
 };
 var ART={w:{k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'},b:{k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'}};
@@ -5426,12 +5426,14 @@ function analyseMove(i){
     else if(g==='best'&&c.second&&c.gap>=15&&c.wBefore<97&&c.wBefore>=8&&mv.san.indexOf('#')<0&&!mv.captured)g='great';
     else if(g==='best'&&c.second&&c.gap>=25&&c.wBefore<97&&c.wBefore>=8&&mv.san.indexOf('#')<0)g='great';
   }
-  // Miss: the opponent's last move was a real error, so this side was clearly better, and this move gave a good part of that back
-  // without simply losing material or allowing mate (that stays a blunder).
-  var oppErr=c.prev&&!c.prev.playedIsBest&&(c.prev.engLoss!=null?c.prev.engLoss:c.prev.loss)>=10;
-  if(oppErr&&c.wBefore>=60&&c.loss>=8&&c.wAfter>=40&&c.matLoss<3&&!c.allowedMate&&(g==='inaccuracy'||g==='mistake'||g==='blunder'))g='miss';
-  // Missing a short forced mate while still keeping a winning position is also a Miss.
-  if(c.missedMate&&!c.allowedMate&&c.wAfter>=50&&(g==='inaccuracy'||g==='mistake'||g==='blunder'))g='miss';
+  // Miss: this move did not lose material or allow mate, but a better move was available and a chance went unused
+  // (the opponent had just erred, the best move won material or mate, or this side was already clearly better).
+  // Blunder is kept for moves that actually lose material or allow mate, and for huge swings (40%+).
+  var oppErr=!!(c.prev&&!c.prev.playedIsBest&&(c.prev.engLoss!=null?c.prev.engLoss:c.prev.loss)>=10);
+  c.oppErr=oppErr;
+  var losesMaterial=c.matLoss>=2||c.hangNet>=2||!!c.allowedMate;
+  var chanceMissed=oppErr||!!c.missedMate||(c.bestMat>=1&&c.loss>=15)||(c.wBefore>=75&&c.loss>=15);
+  if(!losesMaterial&&chanceMissed&&c.loss>=10&&c.loss<40&&(g==='inaccuracy'||g==='mistake'||g==='blunder'))g='miss';
   if((g==='inaccuracy')&&S.inBook&&S.inBook[i]&&i<=22)g='good';
   if(c.allowedMate&&c.wBefore>15&&(g==='inaccuracy'||g==='mistake'||g==='good'))g='blunder';
   if(S.inBook&&S.inBook[i+1]){g='book';c.engLoss=c.loss;c.loss=0;}
@@ -5629,7 +5631,11 @@ function moveIdeas(fen,uci,color,lastTo){
       else if(!rec)bits.push('wins the '+cp+' on '+m.to+' for free');
       else if(vc>vm)bits.push('takes the '+cp+' on '+m.to+' with the '+pc+' (it can be recaptured, but the trade still nets '+pts(vc-vm)+')');
       else if(vc===vm)bits.push('exchanges the '+pc+' for the '+cp+' on '+m.to);
-      else bits.push('takes the '+cp+' on '+m.to+' with the '+pc+' (it can be recaptured, so the trade costs '+pts(vm-vc)+')');
+      else{
+        var rcs=oppMoves.filter(function(x){return x.to===m.to&&x.captured;}).sort(function(x,y){return VAL[x.piece]-VAL[y.piece];});
+        var rpn=rcs[0]?PN[rcs[0].piece]:'defender';
+        bits.push('takes the '+cp+' on '+m.to+' with the '+pc+', but the '+rpn+' can take it back, which on its own would cost '+pts(vm-vc)+', so it only works if what follows makes up for it');
+      }
       tags.push('Capture');fl.capture=true;fl.recapturable=rec;
     }
     if(m.promotion){bits.push('promotes the pawn to '+aPiece(m.promotion)+(m.promotion==='q'?', creating a second queen':''));tags.push('Promotion');}
@@ -6211,7 +6217,7 @@ function gmComment(c){
     s1=me+' '+(st==='open'?'places the rook on the open '+to[0]+'-file, the main highway into the enemy position':st==='semi'?'puts the rook on the half-open '+to[0]+'-file, pressuring the enemy pawn on it':relRank(c.color,to)===7?'invades the seventh rank with the rook, where it attacks the pawns from the side and ties the king down':'moves the rook to '+to+', improving its scope')+'.';
   }else if(c.mv.piece==='q'){
     s1=me+' '+(ph==='opening'&&developedCount(c.fenA,c.color)<2?'brings the queen out early to '+to+', which is risky because it can be harassed with tempo':'places the queen on '+to+', where it combines with the other pieces')+'.';
-  }else s1=me+' '+(ph==='endgame'?'activates the king; in the endgame the king is a fighting piece worth about three points':'moves the king to '+to+(c.san.indexOf('O')<0&&hasRights(c.fenA,c.color)?', giving up castling':(castled(c.fenA,c.color)?', a small shuffle that does not change the shelter much':', looking for a safer or more useful square')))+'.';
+  }else s1=me+' '+(ph==='endgame'?'activates the king; in the endgame the king is a fighting piece worth about three points':'moves the king to '+to+(c.san.indexOf('O')<0&&hasRights(c.fenA,c.color)?', giving up castling':(castled(c.fenA,c.color)?(['inaccuracy','mistake','miss','blunder'].indexOf(c.cls)>=0?', a king step that does nothing to improve the position and spends a tempo the opponent can use':', a small shuffle that does not change the shelter much'):', looking for a safer or more useful square')))+'.';
   if(c.mv.captured&&c.mv.piece!=='p'&&!f.castle){var cp=PN[c.mv.captured];s1+=' The move captures the '+cp+' on '+to+(f.recap?' (a recapture)':f.recapturable?', which can be recaptured, so the real question is the resulting trade':' with nothing coming back')+'.';}
   if(f.check&&!f.fork)s1+=' It comes with check, so '+opp+' has no time for anything else.';
   out.push(s1);
@@ -6245,7 +6251,7 @@ function gmComment(c){
     good:['A reasonable move that keeps the balance, though the engine had a slightly more precise option.','A sound move, only a touch behind the best one.','Perfectly playable. The engine saw a slightly sharper idea, but nothing is lost here.'],
     inaccuracy:['It is not a disaster, but it hands the opponent a small edge that a precise player will use.','A small slip: the position is still fine, but a better move was available and it would have kept more of the advantage.','Not a serious error, though the opponent now has slightly easier play.'],
     mistake:['This is a real error: it gives away a significant part of the advantage and changes who is pressing.','A genuine mistake that shifts the balance of the game, and the opponent can start to take over.','The position gets noticeably worse after this move, and it takes accurate play to recover.'],
-    miss:['The opponent had just slipped, and this move does not punish it, so the chance to take over the game passes.','The opponent offered a chance and this move lets it go, so the game stays level when it could have swung.','A missed opportunity: the previous move was weak and there was a way to make it count.'],
+    miss:['A better move was available here, and this one lets the chance pass without simply losing material.','A missed opportunity: there was a stronger way to play this position, and this move does not make the most of it.','The position offered more than this move takes, because a better option was on the board.'],
     blunder:['This is a decisive error: it changes the evaluation sharply, typically by losing material or allowing a forced sequence.','A serious blunder that swings the game in the opponent\'s favour, usually by dropping material or allowing a tactic.','This move throws away most of the position\'s value in one go.'],
     book:['It is established opening theory, so there is nothing to criticise.','A well-known theory move, played by strong players all the time.','Standard opening knowledge, so no complaints here.'],
     forced:['It was the only legal move.']
@@ -6362,7 +6368,12 @@ function explainCore(c){
   var sev={inaccuracy:'a small slip',mistake:'a clear mistake',miss:'a missed opportunity',blunder:'a serious blunder'}[c.cls];
   var intro='<b>'+c.san+'</b> '+does+'. It is '+sev+': '+me+'\'s win chance drops from '+Math.round(c.wBefore)+'% to '+Math.round(c.wAfter)+'% ('+(sb===sa?'still '+sb+', but the lead shrinks':'from '+sb+' to '+sa)+').';
   S1('What happened',intro);
-  if(c.cls==='miss'&&c.prev){
+  if(c.cls==='miss'&&!(c.oppErr&&c.prev)){
+    S1('The chance you missed',[
+      'This move does not lose material outright, but it lets a better option go. The move that made the most of the position was <b>'+c.bestSan+'</b>, which '+bitsText(bestI,'keeps the pressure')+(c.bestMate>0?' and leads to a forced mate in '+c.bestMate:'')+'.'
+    ]);
+  }
+  if(c.cls==='miss'&&c.oppErr&&c.prev){
     var pw=c.prev;
     S1('The chance you missed',[
       opp+'\'s last move, <b>'+pw.san+'</b>, was '+art(CLS[pw.cls].label)+' '+CLS[pw.cls].label.toLowerCase()+' and gave you an opening. '+c.san+' lets '+opp+' off the hook.',
