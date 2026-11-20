@@ -218,7 +218,20 @@ select{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
 .saved .open span{font-size:12.5px;color:var(--muted)}
 .saved .del{flex:none;width:40px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:16px}
 .saved .del:hover{border-color:var(--bad);color:var(--bad)}
+.board.retrying{touch-action:none}
 .board.retrying .sq{cursor:pointer}
+.pc.lifted{opacity:.28}
+.dragghost{position:fixed;left:0;top:0;z-index:9999;pointer-events:none;filter:drop-shadow(0 10px 12px rgba(0,0,0,.35));will-change:transform}
+.dragghost .pc{position:absolute;inset:0;display:block;filter:none}
+.sq.dragover::after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 0 .6cqw rgba(255,255,255,.9);z-index:4;pointer-events:none}
+.sq.hint{box-shadow:inset 0 0 0 .7cqw rgba(66,86,232,.95);animation:saypulse 1s ease-in-out infinite alternate}
+.promo{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;display:flex;gap:1.5cqw;padding:2cqw;border-radius:2cqw;background:rgba(20,25,34,.92);box-shadow:0 1cqw 4cqw rgba(0,0,0,.5)}
+.promo button{position:relative;width:13cqw;height:13cqw;border:0;border-radius:1.5cqw;background:rgba(255,255,255,.14);cursor:pointer}
+.promo button:hover{background:rgba(255,255,255,.3)}
+.rprog{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
+.rdot{width:11px;height:11px;border-radius:50%;background:var(--line);display:inline-block;flex:none}
+.rdot.ok{background:var(--good)}.rdot.shown{background:var(--warn)}.rdot.skip{background:var(--muted);opacity:.5}.rdot.cur{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.rsum{display:grid;gap:6px;margin-top:10px}.rsr{display:flex;gap:8px;align-items:baseline;font-size:14px}.rsr .rdot{transform:translateY(1px)}
 .sq.rsel{box-shadow:inset 0 0 0 .6cqw var(--accent)}
 .sq.rdest::after{content:"";position:absolute;left:35%;top:35%;width:30%;height:30%;border-radius:50%;background:rgba(47,179,106,.6);z-index:4;pointer-events:none}
 .sq.rdest.cap::after{left:6%;top:6%;width:88%;height:88%;background:none;border:.7cqw solid rgba(47,179,106,.7)}
@@ -428,7 +441,7 @@ body.on-start .l-final{background:radial-gradient(600px 300px at 50% 0,rgba(88,7
 @keyframes btnflow{50%{background-position:100% 50%}}
 .l-copy h2 em{background-size:200% auto;animation:txtflow 6s linear infinite}
 @keyframes txtflow{to{background-position:200% center}}
-@media (hover:none){#fxDot{display:none}}
+@media (hover:none),(pointer:coarse){#fxDot,#fxGlow{display:none!important}}
 @media (prefers-reduced-motion:reduce){#fxBg{animation:none}.l-btn.main,.l-copy h2 em{animation:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -616,7 +629,7 @@ body.on-start .l-final{background:radial-gradient(600px 300px at 50% 0,rgba(88,7
           <div class="card opening" id="openingCard"></div>
           <div class="card verdict" id="explain"></div>
           <div class="card" id="linesCard"></div>
-          <div class="card" id="momentsCard"><h2>Key moments</h2><div class="row" style="margin:0 0 10px"><button class="btn sm primary" id="retryMistakesBtn" type="button" disabled>Retry mistakes</button><span class="hint" id="retryMistakesNote" style="margin-left:8px"></span></div><div class="moments" id="moments"></div></div>
+          <div class="card" id="momentsCard"><h2>Key moments</h2><div class="row" style="margin:0 0 10px"><button class="btn sm primary" id="retryMistakesBtn" type="button" disabled>Retry mistakes</button><select id="retrySide" aria-label="Whose mistakes to retry" style="margin-left:8px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:0 8px"><option value="both">Both sides</option><option value="w">White only</option><option value="b">Black only</option></select><span class="hint" id="retryMistakesNote" style="margin-left:8px"></span></div><div class="moments" id="moments"></div></div>
           <div class="card graph"><div class="gtabs" role="tablist"><button id="gtEval" class="on" type="button">Evaluation</button><button id="gtAcc" type="button">Move accuracy</button></div><div id="graph"></div><p class="hint" id="gHint" style="margin:8px 0 10px"></p><div class="moves" id="moves"></div></div>
           <div class="card" id="summary"></div>
           <details class="card" id="exportCard"><summary>Export and share</summary><p class="hint" style="margin-top:8px">The PGN below carries a move grade and evaluation on every move, ready to paste into another viewer.</p><textarea class="exportBox" id="exportBox" readonly spellcheck="false"></textarea><div class="row" style="margin-top:8px"><button class="btn sm" id="copyPgn">Copy PGN</button><button class="btn sm" id="copyFen">Copy current FEN</button><span class="hint" id="copyNote"></span></div></details>
@@ -6011,7 +6024,7 @@ function strategyNotes(c){
   var kn=[];
   ['w','b'].forEach(function(col){
     var s=B[col],nm=side(col),bits=[];
-    if(s.bishops>=2)bits.push('the bishop pair');
+    if(s.bishops>=2&&B[col==='w'?'b':'w'].bishops<2)bits.push('the bishop pair');
     if(s.outposts.length)bits.push('a knight outpost on '+s.outposts[0]);
     if(s.passed.length)bits.push('a passed pawn on '+s.passed.join(' and '));
     if(s.rookOpen.length)bits.push('a rook on the open '+s.rookOpen[0]+'-file');
@@ -7008,10 +7021,12 @@ function evLabel(sc){
   return fe(sc);
 }
 function renderBoard(){
-  var fen=S.fens[S.idx],g=newChess(fen),b=g.board();
-  var last=S.idx>0?S.moves[S.idx-1]:null,cls=S.idx>0?S.cls[S.idx-1]:null;
+  var R0=S.retry,rv=!!(R0&&R0.view),fen=rv?R0.view:S.fens[S.idx],g=newChess(fen),b=g.board();
+  var last=rv?(R0.last||null):(S.idx>0?S.moves[S.idx-1]:null),cls=rv?null:(S.idx>0?S.cls[S.idx-1]:null);
+  var hf=null,ht=null;
+  if(R0&&!R0.done&&!rv&&R0.hint>=1&&R0.c.bestUci){hf=R0.c.bestUci.slice(0,2);if(R0.hint>=2)ht=R0.c.bestUci.slice(2,4);}
   var checkSq=null,turn=g.turn();
-  if(last&&/[+#]/.test(last.san)){
+  if(g.in_check?g.in_check():(last&&last.san&&/[+#]/.test(last.san))){
     for(var r0=0;r0<8;r0++)for(var f0=0;f0<8;f0++){
       var c0=b[r0][f0];
       if(c0&&c0.type==='k'&&c0.color===turn)checkSq=String.fromCharCode(97+f0)+(8-r0);
@@ -7025,13 +7040,14 @@ function renderBoard(){
       var name=String.fromCharCode(97+f)+(8-r),cell=b[r][f];
       var light=(r+f)%2===0;
       var hl=last&&(last.from===name||last.to===name);
-      h+='<div class="sq '+(light?'l':'d')+(hl?' hl':'')+(checkSq===name?' chk':'')+'" data-sq="'+name+'">';
+      h+='<div class="sq '+(light?'l':'d')+(hl?' hl':'')+(checkSq===name?' chk':'')+(hf===name||ht===name?' hint':'')+'" data-sq="'+name+'">';
       if(ff===0)h+='<span class="co r">'+(8-r)+'</span>';
       if(rr===7)h+='<span class="co f">'+String.fromCharCode(97+f)+'</span>';
       if(ctl[name])h+='<i class="ctl"></i>';
       if(tg[name])h+='<i class="tgt"></i>';
       if(cell)h+=pieceHtml(cell.color,cell.type);
       if(cls&&last&&last.to===name){var cm=CLS[cls.cls];h+='<span class="badge" style="background:'+cm.color+'" title="'+cm.label+'">'+cm.sym+'</span>';}
+      if(R0&&R0.badge&&R0.badge.sq===name){var okb=R0.badge.kind==='ok';h+='<span class="badge" style="background:'+(okb?'#2fb36a':'#d6403a')+'">'+(okb?'\u2713':'\u2715')+'</span>';}
       h+='</div>';
     }
   }
@@ -7040,6 +7056,7 @@ function renderBoard(){
     arrows='<svg class="arrows" viewBox="0 0 8 8" aria-hidden="true">'+arrowSvg(cls.bestUci,'#2fb36a')+'</svg>';
   }
   if(S.retry){arrows=S.retry.show?'<svg class="arrows" viewBox="0 0 8 8" aria-hidden="true">'+arrowSvg(S.retry.c.bestUci,'#2fb36a')+'</svg>':'';}
+  if(R0&&R0.promo)arrows+=promoHtml(R0);
   $('board').innerHTML=h+arrows;
   applyHl();applyRetryUi();
   if(S.anim&&!reduceMotion&&$('animToggle').checked){
@@ -7081,92 +7098,287 @@ function plyNo(i){return Math.floor((i+S.off)/2)+S.n0;}
 function isBlackPly(i){return (i+S.off)%2===1;}
 function plainText(h){return String(h).replace(/<[^>]+>/g,' ').replace(/&[a-z]+;/g,' ').replace(/\s+/g,' ').trim();}
 function pieceAt(fen,sq){var b=newChess(fen).board();return b[8-(+sq[1])][sq.charCodeAt(0)-97];}
+/* ---------- Retry mistakes: a guided session with real piece moving ---------- */
 function canRetry(c){return !!(c&&['blunder','mistake','miss','inaccuracy'].indexOf(c.cls)>=0&&!c.playedIsBest&&c.bestUci&&!S.running);}
-function startRetry(){
-  var c=S.cls[S.idx-1];if(!canRetry(c))return;
-  setPlaying(false);SPEECH.cancel();
-  go(c.i,{silent:true,noSpeak:true});
-  S.retry={k:c.i,from:null,done:false,show:false,msg:'',busy:false,c:c};
-  renderAll();
+function rqSide(){var e=$('retrySide');return e?e.value:'both';}
+function retryTargets(){
+  var sd=rqSide(),out=[];
+  (S.cls||[]).forEach(function(c){
+    if(!canRetry(c))return;
+    if(sd==='w'&&c.color!=='w')return;
+    if(sd==='b'&&c.color!=='b')return;
+    out.push(c.i);
+  });
+  return out;
 }
-function retryTargets(){var out=[];(S.cls||[]).forEach(function(c){if(canRetry(c))out.push(c.i);});return out;}
-function retryNextMistake(){
+function clearRetryTimers(R){if(R&&R.timers){R.timers.forEach(clearTimeout);R.timers=[];}}
+function rtimer(R,fn,ms){var t=setTimeout(function(){if(S&&S.retry===R)fn();},ms);R.timers.push(t);}
+function startRetrySession(){
   if(!S||S.running)return;
   var t=retryTargets();if(!t.length)return;
+  setPlaying(false);SPEECH.cancel();
   var after=t.filter(function(i){return i>=S.idx-1;});
-  var i=after.length?after[0]:t[0];
-  S.retry=null;go(i+1,{silent:true,noSpeak:true});startRetry();
+  var pos=after.length?t.indexOf(after[0]):0;
+  S.rq={list:t,pos:pos,res:{},summary:false};
+  loadRetryTarget();
+}
+function loadRetryTarget(){
+  var Q=S.rq;if(!Q)return;
+  if(S.retry)clearRetryTimers(S.retry);
+  setPlaying(false);SPEECH.cancel();
+  if(Q.pos>=Q.list.length){
+    var lastC=S.cls[Q.list[Q.list.length-1]];
+    Q.summary=true;
+    go(lastC?lastC.i+1:S.idx,{silent:true,noSpeak:true,keepRq:true});
+    S.retry=null;renderAll();return;
+  }
+  var c=S.cls[Q.list[Q.pos]];
+  go(c.i,{silent:true,noSpeak:true,keepRq:true});
+  S.retry={k:c.i,c:c,from:null,done:false,show:false,hint:0,msg:'',busy:false,view:null,last:null,badge:null,tries:0,revealed:false,promo:null,timers:[]};
+  renderAll();
+}
+function nextRetry(){var Q=S.rq;if(!Q)return;Q.pos++;loadRetryTarget();}
+function skipRetry(){
+  var R=S.retry,Q=S.rq;if(!R||!Q||R.busy)return;
+  if(!Q.res[R.c.i])Q.res[R.c.i]={s:'skip',t:R.tries};
+  nextRetry();
+}
+function retryAgainMissed(){
+  var Q=S.rq;if(!Q)return;
+  var miss=Q.list.filter(function(i){return !(Q.res[i]&&Q.res[i].s==='ok');});
+  if(!miss.length)return;
+  S.rq={list:miss,pos:0,res:{},summary:false};
+  loadRetryTarget();
+}
+function exitRetry(){
+  var R=S.retry,c=R?R.c:null;
+  if(R)clearRetryTimers(R);
+  S.retry=null;S.rq=null;
+  if(c)go(c.i+1,{silent:true,noSpeak:true});
+  renderAll();
 }
 function updateRetryBtn(){
   var b=$('retryMistakesBtn'),n=$('retryMistakesNote');if(!b)return;
-  var t=(S&&S.cls&&S.cls.some(Boolean))?retryTargets():[];
+  var ready=!!(S&&S.cls&&S.cls.some(Boolean));
+  var t=ready?retryTargets():[];
   b.disabled=!t.length||!!(S&&S.running);
-  if(n)n.textContent=!S||!S.cls||!S.cls.some(Boolean)?'Analyze the game first.':(t.length?t.length+' to try':'Nothing to retry.');
+  if(n)n.textContent=!ready?'Analyze the game first.':(t.length?t.length+' to try':'Nothing to retry.');
 }
-function exitRetry(){
-  var R=S.retry;if(!R)return;
-  var c=R.c;S.retry=null;
-  go(c.i+1,{silent:true,noSpeak:true});
-  renderAll();
+function retryDots(Q){
+  return '<div class="rprog" aria-hidden="true">'+Q.list.map(function(i,k){
+    var r=Q.res[i],cls=k===Q.pos&&!Q.summary?'cur':(r?(r.s==='ok'?'ok':(r.s==='shown'?'shown':'skip')):'');
+    return '<span class="rdot '+cls+'"></span>';
+  }).join('')+'</div>';
 }
 function renderRetryPanel(){
-  var R=S.retry,c=R.c,me=side(c.color);
-  var h='<div class="head"><span class="bigbadge" style="background:var(--accent)">?</span><div><h2>Your turn: find a better move</h2><div class="evline">'+me+' to move. In the game, <b>'+esc(c.san)+'</b> was played ('+CLS[c.cls].label+').</div></div></div>';
-  h+='<p class="hint" style="margin:10px 0 4px">Click a piece, then the square to move it to. Any move the engine rates close to the best one counts.</p>';
+  var R=S.retry,Q=S.rq,c=R.c,me=side(c.color),cm=CLS[c.cls];
+  var pos=Q?Q.pos+1:1,tot=Q?Q.list.length:1,solved=0;
+  if(Q)Object.keys(Q.res).forEach(function(k){if(Q.res[k].s==='ok')solved++;});
+  var good=R.done&&!R.revealed;
+  var h='<div class="head"><span class="bigbadge" style="background:'+(good?'var(--good)':'var(--accent)')+'">'+(good?'✓':'?')+'</span><div><h2>'+(good?'Well found':'Find a better move')+'</h2><div class="evline">'+me+' to move · mistake '+pos+' of '+tot+(Q?' · '+solved+' found':'')+'</div></div></div>';
+  if(Q&&tot>1)h+=retryDots(Q);
+  h+='<p class="hint" style="margin:10px 0 4px">In the game, <b>'+esc(c.san)+'</b> was played ('+cm.label+', '+Math.round(c.wBefore)+'% → '+Math.round(c.wAfter)+'% for '+me+'). Drag a piece to a square, or tap a piece and then where it goes.</p>';
   h+='<div class="rmsg" aria-live="polite">'+(R.msg||'')+'</div><div class="row">';
-  if(!R.done)h+='<button class="btn sm" id="retryShow" type="button">Show the answer</button>';
-  h+='<button class="btn sm primary" id="retryExit" type="button">'+(R.done?'Continue the review':'Back to the review')+'</button></div>';
+  if(!R.done){
+    h+='<button class="btn sm" id="retryHint" type="button"'+(R.busy?' disabled':'')+'>Hint</button>';
+    h+='<button class="btn sm" id="retryShow" type="button"'+(R.busy?' disabled':'')+'>Show answer</button>';
+    h+='<button class="btn sm" id="retrySkip" type="button"'+(R.busy?' disabled':'')+'>Skip</button>';
+  }else{
+    var last=!Q||Q.pos>=Q.list.length-1;
+    h+='<button class="btn sm primary" id="retryNext" type="button">'+(last?'See results':'Next mistake')+'</button>';
+  }
+  h+='<button class="btn sm" id="retryExit" type="button">Back to the review</button></div>';
+  $('explain').innerHTML=h;
+}
+function renderRetrySummary(){
+  var Q=S.rq,ok=0,h='';
+  Q.list.forEach(function(i){if(Q.res[i]&&Q.res[i].s==='ok')ok++;});
+  h+='<div class="head"><span class="bigbadge" style="background:var(--accent)">'+ok+'/'+Q.list.length+'</span><div><h2>Retry complete</h2><div class="evline">You found a better move on '+ok+' of '+Q.list.length+' mistakes.</div></div></div>';
+  h+='<div class="rsum">'+Q.list.map(function(i){
+    var c=S.cls[i],r=Q.res[i]||{s:'skip'},lab=r.s==='ok'?(r.t>1?'found after '+r.t+' tries':'found first try'):(r.s==='shown'?'answer shown':'skipped');
+    return '<div class="rsr '+r.s+'"><span class="rdot '+(r.s==='ok'?'ok':(r.s==='shown'?'shown':'skip'))+'"></span><b>'+plyNo(i)+(isBlackPly(i)?'…':'.')+esc(c.san)+'</b><span>'+lab+'. Best was <b>'+esc(c.bestSan)+'</b>.</span></div>';
+  }).join('')+'</div><div class="row" style="margin-top:12px">';
+  if(ok<Q.list.length)h+='<button class="btn sm primary" id="retryAgain" type="button">Retry the ones I missed</button>';
+  h+='<button class="btn sm'+(ok<Q.list.length?'':' primary')+'" id="retryExit" type="button">Back to the review</button></div>';
   $('explain').innerHTML=h;
 }
 function showRetry(){
-  var R=S.retry;if(!R)return;
-  R.show=true;R.from=null;
-  R.msg='The best move was <b>'+esc(R.c.bestSan)+'</b>'+(R.c.bestLine?', the start of <b>'+esc(R.c.bestLine)+'</b>':'')+'. It is shown with the green arrow.';
+  var R=S.retry,Q=S.rq;if(!R||R.busy||R.done)return;
+  R.show=true;R.revealed=true;R.from=null;
+  if(Q&&!(Q.res[R.c.i]&&Q.res[R.c.i].s==='ok'))Q.res[R.c.i]={s:'shown',t:R.tries};
+  R.msg='The best move was <b>'+esc(R.c.bestSan)+'</b>'+(R.c.bestLine?', the start of <b>'+esc(R.c.bestLine)+'</b>':'')+'. It is shown with the green arrow, and you can still play it on the board.';
   renderBoard();renderRetryPanel();
 }
-function judgeDone(R,m,w){
-  var c=R.c,loss=c.wBefore-w;
-  R.busy=false;
-  if(loss<=3){
-    R.done=true;
-    R.msg='<span class="ok">Well found.</span> <b>'+esc(m.san)+'</b> keeps '+Math.round(w)+'% for '+side(c.color)+', close to the best move <b>'+esc(c.bestSan)+'</b> ('+Math.round(c.wBefore)+'%).';
-  }else{
-    R.msg='<span class="bad">Not quite.</span> <b>'+esc(m.san)+'</b> leaves '+side(c.color)+' with '+Math.round(w)+'% against '+Math.round(c.wBefore)+'% for the best move. Try another move, or show the answer.';
-  }
+function hintRetry(){
+  var R=S.retry;if(!R||R.busy||R.done)return;
+  R.hint=Math.min(2,R.hint+1);
+  R.msg=R.hint===1?'Hint: the piece that should move is glowing.':'Hint: the glowing squares are where the best move starts and ends.';
   R.from=null;renderBoard();renderRetryPanel();
 }
-function judgeRetry(m){
-  var R=S.retry,c=R.c,uci=m.from+m.to+(m.promotion||'');
-  R.from=null;
-  if(uci===c.uci){R.msg='<span class="bad">That is the move that was played</span>, and it is the mistake. Try something else.';renderBoard();renderRetryPanel();return;}
-  if(uci===c.bestUci){R.done=true;R.msg='<span class="ok">Correct.</span> <b>'+esc(m.san)+'</b> is the engine\'s top choice here.';renderBoard();renderRetryPanel();return;}
+function retryMovesFor(from,to){
+  var R=S.retry;
+  return newChess(S.fens[R.k]).moves({verbose:true}).filter(function(m){return m.from===from&&m.to===to;});
+}
+function retryAttempt(from,to,how){
+  var R=S.retry;if(!R||R.busy||R.done)return;
+  var mv=retryMovesFor(from,to);
+  if(!mv.length){R.from=null;renderBoard();return;}
+  if(mv.length>1&&mv[0].promotion){R.promo={from:from,to:to,how:how};R.from=null;renderBoard();return;}
+  retryCommit(mv[0],how);
+}
+function retryCommit(m,how){
+  var R=S.retry,c=R.c,g2=newChess(S.fens[R.k]);
+  g2.move({from:m.from,to:m.to,promotion:m.promotion});
+  var fenX=g2.fen(),uci=m.from+m.to+(m.promotion||'');
+  R.from=null;R.promo=null;R.busy=true;R.view=fenX;R.last={from:m.from,to:m.to};R.badge=null;R.tries++;
+  R.msg='Checking that move…';
+  S.anim=how==='drag'?null:{from:m.from,to:m.to};
+  renderBoard();renderRetryPanel();
+  SFX.play(moveKind(m));
+  if(uci===c.uci){retryVerdict(R,m,{w:c.wAfter,same:true});return;}
+  if(uci===c.bestUci){
+    var bl=c.A.lines.filter(function(l){return l.pv&&l.pv[0]===uci;})[0];
+    retryVerdict(R,m,{w:c.wBefore,best:true,reply:bl&&bl.pv[1]});return;
+  }
+  if(g2.in_checkmate()){retryVerdict(R,m,{w:100,best:true});return;}
   var line=c.A.lines.filter(function(l){return l.pv&&l.pv[0]===uci;})[0];
-  if(line){judgeDone(R,m,wp(line.score,c.color));return;}
-  var g2=newChess(c.fenA);g2.move({from:m.from,to:m.to,promotion:m.promotion});
-  if(g2.in_checkmate()){R.done=true;R.msg='<span class="ok">Checkmate.</span> <b>'+esc(m.san)+'</b> ends the game.';renderBoard();renderRetryPanel();return;}
-  R.busy=true;R.msg='Checking that move with the engine…';renderBoard();renderRetryPanel();
-  var fenX=g2.fen();
+  if(line){retryVerdict(R,m,{w:wp(line.score,c.color),reply:line.pv[1]});return;}
   eng.ready.then(function(){return eng.analyze(fenX,12,4000);}).then(function(lines){
     if(S.retry!==R)return;
-    if(!lines||!lines.length){R.busy=false;R.msg='The engine could not check that move. Try another one or show the answer.';renderRetryPanel();return;}
+    if(!lines||!lines.length){retryFailSoft(R,m);return;}
     var nl=normLines(lines,g2.turn());
-    judgeDone(R,m,wp(nl[0].score,c.color));
-  }).catch(function(){if(S.retry!==R)return;R.busy=false;R.msg='The engine could not check that move. Try another one or show the answer.';renderRetryPanel();});
+    retryVerdict(R,m,{w:wp(nl[0].score,c.color),reply:nl[0].pv&&nl[0].pv[0]});
+  }).catch(function(){if(S.retry===R)retryFailSoft(R,m);});
 }
-function retryClick(ev){
-  var R=S&&S.retry;if(!R||R.done||R.busy)return;
-  var el=ev.target.closest&&ev.target.closest('.sq');if(!el)return;
-  var sq=el.getAttribute('data-sq'),fen=S.fens[R.k],g=newChess(fen),p=pieceAt(fen,sq);
-  if(p&&p.color===g.turn()){R.from=R.from===sq?null:sq;R.show=false;renderBoard();return;}
-  if(!R.from)return;
-  var mv=g.moves({verbose:true}).filter(function(m){return m.from===R.from&&m.to===sq;});
-  if(!mv.length){R.msg='<span class="bad">That is not a legal move.</span>';R.from=null;renderBoard();renderRetryPanel();return;}
-  judgeRetry(mv.filter(function(x){return x.promotion==='q';})[0]||mv[0]);
+function retryFailSoft(R,m){
+  R.msg='The engine could not check that move, so it was taken back. Try another one.';
+  R.tries--;rtimer(R,function(){retryTakeBack(R,m);},400);
+}
+function retryTakeBack(R,m){
+  R.view=null;R.last=null;R.badge=null;R.busy=false;
+  S.anim={from:m.to,to:m.from};
+  if(R.tries>=2&&R.hint<1)R.hint=1;
+  renderBoard();SFX.play('back');renderRetryPanel();
+}
+function retryVerdict(R,m,v){
+  if(S.retry!==R)return;
+  var c=R.c,Q=S.rq,me=side(c.color),w=v.w,loss=Math.max(0,c.wBefore-w);
+  if(v.same){
+    R.badge={sq:m.to,kind:'bad'};
+    R.msg='<span class="bad">That is the move from the game</span>, and it is the mistake. Try something else.';
+    SFX.play('mistake',0.14);renderBoard();renderRetryPanel();
+    rtimer(R,function(){retryTakeBack(R,m);},1200);return;
+  }
+  if(loss<=3){
+    var tag=v.best?'Best move':(loss<=1.5?'Excellent':'Good move');
+    R.done=true;R.busy=false;R.badge={sq:m.to,kind:'ok'};
+    R.msg='<span class="ok">'+tag+'.</span> <b>'+esc(m.san)+'</b> keeps '+Math.round(w)+'% for '+me+(v.best?'.':', close to the best move <b>'+esc(c.bestSan)+'</b> ('+Math.round(c.wBefore)+'%).');
+    if(Q&&!R.revealed)Q.res[c.i]={s:'ok',t:R.tries};
+    SFX.play('great',0.14);renderBoard();renderRetryPanel();
+    if(v.reply)rtimer(R,function(){retryReply(R,v.reply);},900);
+    return;
+  }
+  var better=w>c.wAfter+3;
+  R.badge={sq:m.to,kind:'bad'};
+  R.msg='<span class="bad">Not quite.</span> <b>'+esc(m.san)+'</b> leaves '+me+' with '+Math.round(w)+'% against '+Math.round(c.wBefore)+'% for the best move.'+(better?' That is better than the move in the game, but there is still more.':'')+(R.tries>=2?' Press Hint if you are stuck.':'');
+  SFX.play('mistake',0.14);renderBoard();renderRetryPanel();
+  rtimer(R,function(){retryTakeBack(R,m);},1300);
+}
+function retryReply(R,uci){
+  var g=newChess(R.view),mv=g.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci.length>4?uci[4]:undefined});
+  if(!mv)return;
+  R.view=g.fen();R.last={from:mv.from,to:mv.to};R.badge=null;
+  S.anim={from:mv.from,to:mv.to};
+  R.msg+=' The best reply is <b>'+esc(mv.san)+'</b>.';
+  renderBoard();SFX.play(moveKind(mv));renderRetryPanel();
+}
+function promoHtml(R){
+  var col=R.c.color;
+  return '<div class="promo" role="group" aria-label="Choose a promotion piece">'+['q','r','b','n'].map(function(p){
+    return '<button type="button" data-p="'+p+'" aria-label="Promote">'+pieceHtml(col,p)+'</button>';
+  }).join('')+'</div>';
+}
+/* ---- dragging: pointer events work for mouse, touch and pen ---- */
+var DRAG=null;
+function sqFromPoint(x,y){
+  var r=$('board').getBoundingClientRect(),col=Math.floor((x-r.left)/r.width*8),row=Math.floor((y-r.top)/r.height*8);
+  if(col<0||col>7||row<0||row>7)return null;
+  var f=S.flipped?7-col:col,rk=S.flipped?row:7-row;
+  return String.fromCharCode(97+f)+(rk+1);
+}
+function moveGhost(x,y){
+  if(!DRAG)return;
+  DRAG.gh.style.transform='translate('+(x-DRAG.size/2)+'px,'+(y-DRAG.size/2)+'px) scale(1.12)';
+}
+function endDrag(){
+  if(!DRAG)return;
+  try{$('board').releasePointerCapture(DRAG.id);}catch(e){}
+  if(DRAG.gh.parentNode)DRAG.gh.parentNode.removeChild(DRAG.gh);
+  var o=$('board').querySelectorAll('.lifted,.dragover');for(var i=0;i<o.length;i++){o[i].classList.remove('lifted');o[i].classList.remove('dragover');}
+  DRAG=null;
+}
+function retryDown(ev){
+  var R=S&&S.retry;if(!R)return;
+  if(ev.button!=null&&ev.button>0)return;
+  if(ev.target.closest&&ev.target.closest('.promo')){
+    var pb=ev.target.closest('button[data-p]');
+    if(pb&&R.promo){
+      var P=R.promo,mv=retryMovesFor(P.from,P.to).filter(function(x){return x.promotion===pb.getAttribute('data-p');})[0];
+      R.promo=null;if(mv)retryCommit(mv,P.how);else renderBoard();
+    }
+    ev.preventDefault();return;
+  }
+  if(R.promo){R.promo=null;renderBoard();return;}
+  if(R.busy||R.done)return;
+  var sq=sqFromPoint(ev.clientX,ev.clientY);if(!sq)return;
+  var fen=S.fens[R.k],p=pieceAt(fen,sq),turn=newChess(fen).turn();
+  if(R.from&&R.from!==sq&&retryMovesFor(R.from,sq).length){ev.preventDefault();retryAttempt(R.from,sq,'click');return;}
+  if(p&&p.color===turn){
+    ev.preventDefault();
+    var wasSel=R.from===sq;
+    R.from=sq;R.show=false;
+    renderBoard();
+    var board=$('board'),sqEl=board.querySelector('.sq[data-sq="'+sq+'"]'),pc=sqEl&&sqEl.querySelector('.pc');
+    if(!pc)return;
+    var size=board.getBoundingClientRect().width/8*1.1;
+    var gh=document.createElement('div');gh.className='dragghost';gh.style.width=gh.style.height=size+'px';
+    gh.appendChild(pc.cloneNode(true));document.body.appendChild(gh);
+    DRAG={id:ev.pointerId,from:sq,gh:gh,size:size,sx:ev.clientX,sy:ev.clientY,moved:false,wasSel:wasSel,over:null};
+    pc.classList.add('lifted');
+    try{board.setPointerCapture(ev.pointerId);}catch(e){}
+    moveGhost(ev.clientX,ev.clientY);
+  }else if(R.from){R.from=null;renderBoard();}
+}
+function retryMove(ev){
+  if(!DRAG||ev.pointerId!==DRAG.id)return;
+  if(!DRAG.moved&&Math.hypot(ev.clientX-DRAG.sx,ev.clientY-DRAG.sy)>5)DRAG.moved=true;
+  moveGhost(ev.clientX,ev.clientY);
+  var sq=sqFromPoint(ev.clientX,ev.clientY);
+  if(sq!==DRAG.over){
+    var b=$('board'),o=b.querySelector('.sq.dragover');if(o)o.classList.remove('dragover');
+    DRAG.over=sq;
+    if(sq){var e=b.querySelector('.sq[data-sq="'+sq+'"]');if(e)e.classList.add('dragover');}
+  }
+}
+function retryUp(ev){
+  if(!DRAG||ev.pointerId!==DRAG.id)return;
+  var D=DRAG,R=S&&S.retry,sq=sqFromPoint(ev.clientX,ev.clientY);
+  endDrag();
+  if(!R)return;
+  if(D.moved){
+    if(sq&&sq!==D.from&&retryMovesFor(D.from,sq).length){retryAttempt(D.from,sq,'drag');return;}
+    if(sq!==D.from){R.from=null;}
+    renderBoard();
+  }else if(D.wasSel){R.from=null;renderBoard();}
+}
+function retryCancel(ev){
+  if(!DRAG||ev.pointerId!==DRAG.id)return;
+  endDrag();if(S&&S.retry){S.retry.from=null;renderBoard();}
 }
 function applyRetryUi(){
   var b=$('board'),R=S.retry;
   b.classList.toggle('retrying',!!(R&&!R.done));
-  if(!R||!R.from)return;
+  if(!R||!R.from||R.busy)return;
   var sqEl=b.querySelector('.sq[data-sq="'+R.from+'"]');if(sqEl)sqEl.classList.add('rsel');
   newChess(S.fens[R.k]).moves({verbose:true}).forEach(function(m){
     if(m.from!==R.from)return;
@@ -7177,6 +7389,7 @@ function applyRetryUi(){
 function renderExplain(){
   var el=$('explain');
   if(S.retry){renderRetryPanel();return;}
+  if(S.rq&&S.rq.summary){renderRetrySummary();return;}
   if(S.idx===0){
     el.innerHTML='<div class="empty"><span class="bigbadge">'+GLYPH.n+TXT+'</span><div><h2>Starting position</h2><p class="hint">Step through the game with the arrow keys or the buttons. '+(S.cls.some(Boolean)?'Each move shows its grade and the reason for it.':'Press “Analyze game” and every move gets a grade and a reason.')+'</p></div></div>';
     return;
@@ -7394,7 +7607,7 @@ function go(i,opts){
   i=Math.max(0,Math.min(S.fens.length-1,i));
   var prev=S.idx;
   if(i===prev)return;
-  S.idx=i;S.retry=null;
+  S.idx=i;S.retry=null;if(!opts.keepRq)S.rq=null;
   S.anim=(!opts.silent&&i-prev===1)?{from:S.moves[i-1].from,to:S.moves[i-1].to}:null;
   S.showArrow=$('arrowToggle').checked;
   S.hl=null;
@@ -7921,8 +8134,9 @@ function wire(){
   var exp=$('explain');
   var tapSn=function(ev){var e=ev.target.closest&&ev.target.closest('.sn');if(!e||!S)return;if(ev.type==='keydown'&&ev.key!=='Enter'&&ev.key!==' ')return;var q=(e.getAttribute('data-sq')||'').split(' ').filter(Boolean);if(!q.length)return;ev.preventDefault();var u=e.getAttribute('data-u');S.hl=q;applyHl();markSentence(u==null?null:+u);e.classList.add('on');};
   exp.addEventListener('click',tapSn);exp.addEventListener('keydown',tapSn);
-  exp.addEventListener('click',function(ev){var b=ev.target.closest&&ev.target.closest('button');if(!b||!S)return;if(b.id==='retryBtn')startRetry();else if(b.id==='retryShow')showRetry();else if(b.id==='retryExit')exitRetry();});
-  $('board').addEventListener('click',retryClick);
+  exp.addEventListener('click',function(ev){var b=ev.target.closest&&ev.target.closest('button');if(!b||!S)return;var id=b.id;if(id==='retryShow')showRetry();else if(id==='retryExit')exitRetry();else if(id==='retryHint')hintRetry();else if(id==='retrySkip')skipRetry();else if(id==='retryNext')nextRetry();else if(id==='retryAgain')retryAgainMissed();});
+  var bd=$('board');bd.addEventListener('pointerdown',retryDown);bd.addEventListener('pointermove',retryMove);bd.addEventListener('pointerup',retryUp);bd.addEventListener('pointercancel',retryCancel);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&S&&(S.retry||S.rq)){if(DRAG){endDrag();}else exitRetry();}});
   updateRunInfo();
   $('exportCard').addEventListener('toggle',function(){if(this.open&&S)$('exportBox').value=annotatedPgn();});
   $('copyPgn').onclick=function(){if(!S)return;var t=annotatedPgn();$('exportBox').value=t;copyText(t);};
@@ -7930,7 +8144,7 @@ function wire(){
   $('engineChip').onclick=function(){openEngLog();};
   var jump=function(e){var b=e.target.closest('[data-i]');if(b)nav(+b.getAttribute('data-i'));};
   $('moves').onclick=jump;$('moments').onclick=jump;
-  var rmb=$('retryMistakesBtn');if(rmb)rmb.onclick=retryNextMistake;
+  var rmb=$('retryMistakesBtn');if(rmb)rmb.onclick=startRetrySession;var rsd=$('retrySide');if(rsd)rsd.onchange=updateRetryBtn;
   $('gtEval').onclick=function(){GMODE='eval';if(S)renderGraph();};
   $('gtAcc').onclick=function(){GMODE='acc';if(S)renderGraph();};
   // graph scrubbing (the svg is created once so pointer capture survives updates)
